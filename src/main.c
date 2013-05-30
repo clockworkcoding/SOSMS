@@ -8,6 +8,8 @@
 #define MY_UUID { 0x90, 0x68, 0xCE, 0xBD, 0x2E, 0x92, 0x4D, 0x2A, 0xAC, 0x83, 0xBE, 0xE1, 0x0A, 0xF0, 0xD9, 0x93 }
 PBL_APP_INFO(MY_UUID, "SOSMS", "Clockwork Coding", 0, 1, RESOURCE_ID_IMAGE_PLACEHOLDER_ICON,APP_INFO_STANDARD_APP);
 
+#define MAX_MORSE_LENGTH 	6
+#define BUFFER_LENGTH 		50
 
 Window window;
 
@@ -16,8 +18,9 @@ TextLayer morseCodeLayer;
 TextLayer msgLengthLayer;
 TextLayer letterPreviewLayer;
 
+char message[160]="";
+char text_buffer[BUFFER_LENGTH +1]="";
 
-char text_buffer[160]="";
 
 char morseLetter[9]=""; //dots and dashes entered
 char letter[9]=""; // dots and dashes translated to 'i' and 't'
@@ -78,6 +81,15 @@ void updateMessage()
 	itoa(length,msgLength);
 	strcat(msgLength,"/160");
 	text_layer_set_text(&msgLengthLayer, msgLength);
+	if(length > BUFFER_LENGTH)
+	{ 
+		memcpy( text_buffer, &message[length-BUFFER_LENGTH], BUFFER_LENGTH );
+		text_buffer[BUFFER_LENGTH] = '\0';
+	}
+	else
+	{
+		strcpy(text_buffer,message);
+	}
   	text_layer_set_text(&textLayer, text_buffer);
 }
 
@@ -99,10 +111,12 @@ void resetMorse()
 void up_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
   (void)recognizer;
   (void)window;
-
-	text_buffer[length++] =letters[findLetter()];
-	resetMorse();
-	updateMessage();
+	if(length<160)
+	{ 
+		message[length++] =letters[findLetter()];
+		resetMorse();
+		updateMessage();
+	}
 }
 
 
@@ -126,7 +140,7 @@ void down_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
 	if (length > 0)
 	{
 		length--;
-		text_buffer[length]='\0';
+		message[length]='\0';
 		updateMessage();
 	}
 
@@ -136,11 +150,9 @@ void select_single_click_handler(ClickRecognizerRef recognizer, Window *window) 
   (void)recognizer;
   (void)window;
 
-	if(strlen(morseLetter) >= 6)
+	if(strlen(morseLetter) >= MAX_MORSE_LENGTH)
 	{
-		text_buffer[length++] =letters[54];//space
 		resetMorse();
-		updateMessage();
 	}
 	else
 	{
@@ -154,11 +166,9 @@ void select_single_click_handler(ClickRecognizerRef recognizer, Window *window) 
 void select_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
   (void)recognizer;
   (void)window;
-	if(strlen(morseLetter) >= 6)
+	if(strlen(morseLetter) >= MAX_MORSE_LENGTH)
 	{
-		text_buffer[length++] =letters[54];//space
 		resetMorse();
-		updateMessage();
 	}
 	else
 	{
@@ -194,10 +204,10 @@ void handle_init(AppContextRef ctx) {
   window_init(&window, "S.O.S.M.S.");
   window_stack_push(&window, true /* Animated */);
 
-  text_layer_init(&textLayer, GRect(10, 0, 124, 100));
-  text_layer_set_text(&textLayer, "Hello World");
-  text_layer_set_background_color(&textLayer, GColorBlack);
-  text_layer_set_text_color(&textLayer, GColorWhite);
+  text_layer_init(&textLayer, GRect(2, 0, 140, 80));
+  text_layer_set_text(&textLayer, "...");
+  text_layer_set_background_color(&textLayer, GColorClear);
+  text_layer_set_text_color(&textLayer, GColorBlack);
   text_layer_set_font(&textLayer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
   layer_add_child(&window.layer, &textLayer.layer);
 
@@ -205,23 +215,23 @@ void handle_init(AppContextRef ctx) {
   text_layer_init(&morseCodeLayer,GRect(10, 113, 100, 40));
   text_layer_set_text(&morseCodeLayer, "... -- ...");
   text_layer_set_font(&morseCodeLayer, fonts_get_system_font(FONT_KEY_GOTHAM_30_BLACK));
-  text_layer_set_background_color(&morseCodeLayer, GColorBlack);
-  text_layer_set_text_color(&morseCodeLayer, GColorWhite);
+  text_layer_set_background_color(&morseCodeLayer, GColorClear);
+  text_layer_set_text_color(&morseCodeLayer, GColorBlack);
   layer_add_child(&window.layer, &morseCodeLayer.layer);
 
-  text_layer_init(&msgLengthLayer, GRect(0, 100, 60, 100));
-  text_layer_set_text(&msgLengthLayer, "160/160");
-  text_layer_set_background_color(&msgLengthLayer, GColorBlack);
-  text_layer_set_text_color(&msgLengthLayer, GColorWhite);
+  text_layer_init(&msgLengthLayer, GRect(0, 80, 55, 30));
+  text_layer_set_text(&msgLengthLayer, "0/160");
+  text_layer_set_background_color(&msgLengthLayer, GColorClear);
+  text_layer_set_text_color(&msgLengthLayer, GColorBlack);
   text_layer_set_font(&msgLengthLayer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
   text_layer_set_text_alignment(&msgLengthLayer, GTextAlignmentRight);
   layer_add_child(&window.layer, &msgLengthLayer.layer);
 	
   text_layer_init(&letterPreviewLayer,GRect(120, 113, 144-40, 40));
-  text_layer_set_text(&letterPreviewLayer, "*");
+  text_layer_set_text(&letterPreviewLayer, " ");
   text_layer_set_font(&letterPreviewLayer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-  text_layer_set_background_color(&letterPreviewLayer, GColorBlack);
-  text_layer_set_text_color(&letterPreviewLayer, GColorWhite);
+  text_layer_set_background_color(&letterPreviewLayer, GColorClear);
+  text_layer_set_text_color(&letterPreviewLayer, GColorBlack);
   layer_add_child(&window.layer, &letterPreviewLayer.layer);
 
   // Attach our desired button functionality
