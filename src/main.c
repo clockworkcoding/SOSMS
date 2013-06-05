@@ -2,8 +2,6 @@
 #include "pebble_os.h"
 #include "pebble_app.h"
 #include "pebble_fonts.h"
-#include <stdlib.h>
-#include <string.h>
 
 #define MY_UUID { 0x90, 0x68, 0xCE, 0xBD, 0x2E, 0x92, 0x4D, 0x2A, 0xAC, 0x83, 0xBE, 0xE1, 0x0A, 0xF0, 0xD9, 0x93 }
 PBL_APP_INFO(MY_UUID, "SOSMS", "Clockwork Coding", 0, 2, RESOURCE_ID_IMAGE_PLACEHOLDER_ICON,APP_INFO_STANDARD_APP);
@@ -17,7 +15,9 @@ TextLayer textLayer;
 TextLayer morseCodeLayer;
 TextLayer msgLengthLayer;
 TextLayer letterPreviewLayer;
+TextLayer sendStatusLayer;
 
+char sendStatus[8]="";
 char message[160]="";
 char text_buffer[BUFFER_LENGTH +1]="";
 
@@ -108,7 +108,7 @@ void resetMorse()
 }
 // Modify these common button handlers
 
-void up_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
+void select_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
   (void)recognizer;
   (void)window;
 	if(length<160)
@@ -119,8 +119,41 @@ void up_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
 	}
 }
 
+void select_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
+	//send message to phone
+	strcpy(sendStatus,"Sending");
+	text_layer_set_text(&sendStatusLayer, sendStatus);
+	
+	message[length+1]='\0';
+	// CString + key:
+	static const uint32_t SOME_STRING_KEY = 0x02;
+	const char * messageOut = message;
+	// Calculate the buffer size that is needed for the final Dictionary:
+	const uint8_t key_count = 1;
+	const uint32_t size = dict_calc_buffer_size(key_count, strlen(messageOut) + 1);
+	// Stack-allocated buffer in which to create the Dictionary:
+	uint8_t buffer[size];
+	// Iterator variable, keeps the state of the creation serialization process:
+	DictionaryIterator *iter2;
+	
+	DictionaryIterator **iter = &iter2;
+	
+	app_message_out_get(iter);	
+	
+	// Begin:
+//	dict_write_begin(*iter, buffer, sizeof(buffer));
+	
+	// Write the CString:
+	dict_write_cstring(*iter, SOME_STRING_KEY, messageOut);
+	// End:
+	const uint32_t final_size = dict_write_end(*iter);
+	
+	app_message_out_send();
+	app_message_out_release();
+}
 
-void down_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
+
+void up_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
   (void)recognizer;
   (void)window;
 	
@@ -133,7 +166,7 @@ void down_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
 
 }
 
-void down_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
+void up_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
   (void)recognizer;
   (void)window;
 	
@@ -146,7 +179,7 @@ void down_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
 
 }
 
-void select_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
+void down_single_click_handler(ClickRecognizerRef recognizer, Window *window) {
   (void)recognizer;
   (void)window;
 
@@ -163,7 +196,7 @@ void select_single_click_handler(ClickRecognizerRef recognizer, Window *window) 
 }
 
 
-void select_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
+void down_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
   (void)recognizer;
   (void)window;
 	if(strlen(morseLetter) >= MAX_MORSE_LENGTH)
@@ -178,6 +211,24 @@ void select_long_click_handler(ClickRecognizerRef recognizer, Window *window) {
 	updateMorse();
 }
 
+void my_out_sent_handler(DictionaryIterator *sent, void *context) {
+  // outgoing message was delivered
+	strcpy(sendStatus,"Sent");
+	text_layer_set_text(&sendStatusLayer, sendStatus);
+}
+void my_out_fail_handler(DictionaryIterator *failed, AppMessageResult reason, void *context) {
+  // outgoing message failed
+	strcpy(sendStatus,"Failed");
+	text_layer_set_text(&sendStatusLayer, sendStatus);
+}
+void my_in_rcv_handler(DictionaryIterator *received, void *context) {
+  // incoming message received
+}
+void my_in_drp_handler(void *context, AppMessageResult reason) {
+  // incoming message dropped
+}
+
+
 // This usually won't need to be modified
 
 void click_config_provider(ClickConfig **config, Window *window) {
@@ -188,7 +239,8 @@ void click_config_provider(ClickConfig **config, Window *window) {
   	config[BUTTON_ID_SELECT]->long_click.handler = (ClickHandler) select_long_click_handler;
 
   	config[BUTTON_ID_UP]->click.handler = (ClickHandler) up_single_click_handler;
-  	config[BUTTON_ID_UP]->click.repeat_interval_ms = 100;
+	
+  	config[BUTTON_ID_UP]->long_click.handler = (ClickHandler) up_long_click_handler;
 
   	config[BUTTON_ID_DOWN]->click.handler = (ClickHandler) down_single_click_handler;
 	
@@ -218,7 +270,16 @@ void handle_init(AppContextRef ctx) {
   text_layer_set_background_color(&morseCodeLayer, GColorClear);
   text_layer_set_text_color(&morseCodeLayer, GColorBlack);
   layer_add_child(&window.layer, &morseCodeLayer.layer);
+  
 
+  text_layer_init(&sendStatusLayer, GRect(10, 80, 49, 30));
+  text_layer_set_text(&sendStatusLayer, "");
+  text_layer_set_background_color(&sendStatusLayer, GColorClear);
+  text_layer_set_text_color(&sendStatusLayer, GColorBlack);
+  text_layer_set_font(&sendStatusLayer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+  layer_add_child(&window.layer, &sendStatusLayer.layer);
+	
+	
   text_layer_init(&msgLengthLayer, GRect(90, 80, 49, 30));
   text_layer_set_text(&msgLengthLayer, "0/160");
   text_layer_set_background_color(&msgLengthLayer, GColorClear);
@@ -241,7 +302,20 @@ void handle_init(AppContextRef ctx) {
 
 void pbl_main(void *params) {
   PebbleAppHandlers handlers = {
-    .init_handler = &handle_init
-  };
+    .init_handler = &handle_init,
+  
+		.messaging_info = {
+			.buffer_sizes = {
+				.inbound = 124,
+				.outbound = 256,
+			},
+			.default_callbacks.callbacks = {
+				.out_sent = my_out_sent_handler,
+				.out_failed = my_out_fail_handler,
+				.in_received = my_in_rcv_handler,
+				.in_dropped = my_in_drp_handler,
+			}
+	}
+		};
   app_event_loop(params, &handlers);
 }
